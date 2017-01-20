@@ -33,7 +33,7 @@ describe('yaquest', () => {
       server.res.body = {hello: 'world'};
 
       return yaquest
-        .create(`http://localhost:${port}`)
+        .forUrl(`http://localhost:${port}`)
         .post('/foo')
         .send({bar: 'baz'})
         .then(res => {
@@ -46,8 +46,7 @@ describe('yaquest', () => {
       server.res.status = 200;
 
       return yaquest
-        .create(`http://localhost:${port}`)
-        .post('/foo')
+        .post(`http://localhost:${port}/foo`)
         .set('x-eggs', 'spam')
         .then(() => {
           expect(server.req.header('x-eggs')).to.equal('spam')

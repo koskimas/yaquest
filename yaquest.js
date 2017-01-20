@@ -259,8 +259,8 @@ function createError(data) {
   return error;
 }
 
-function combineUrl(baseUrl, url) {
-  return ensureSlashEnd(baseUrl || '') + ensureNoSlashStart(url || '');
+function combineUrl(baseUrl, path) {
+  return ensureSlashEnd(baseUrl || '') + ensureNoSlashStart(path || '');
 }
 
 function ensureSlashEnd(str) {
@@ -286,26 +286,46 @@ function ensureNoSlashStart(str) {
 module.exports = {
   Request,
 
-  create(baseUrl) {
+  get(url) {
+    return new Request().get().url(url);
+  },
+
+  post(url) {
+    return new Request().post().url(url);
+  },
+
+  put(url) {
+    return new Request().put().url(url);
+  },
+
+  patch(url) {
+    return new Request().patch().url(url);
+  },
+
+  delete(url) {
+    return new Request().delete().url(url);
+  },
+
+  forUrl(baseUrl) {
     return {
-      get(url) {
-        return new Request().get().url(combineUrl(baseUrl, url));
+      get(path) {
+        return new Request().get().url(combineUrl(baseUrl, path));
       },
 
-      post(url) {
-        return new Request().post().url(combineUrl(baseUrl, url));
+      post(path) {
+        return new Request().post().url(combineUrl(baseUrl, path));
       },
 
-      put(url) {
-        return new Request().put().url(combineUrl(baseUrl, url));
+      put(path) {
+        return new Request().put().url(combineUrl(baseUrl, path));
       },
 
-      patch(url) {
-        return new Request().patch().url(combineUrl(baseUrl, url));
+      patch(path) {
+        return new Request().patch().url(combineUrl(baseUrl, path));
       },
 
-      delete(url) {
-        return new Request().delete().url(combineUrl(baseUrl, url));
+      delete(path) {
+        return new Request().delete().url(combineUrl(baseUrl, path));
       }
     };
   }
