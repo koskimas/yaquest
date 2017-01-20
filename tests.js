@@ -13,7 +13,9 @@ describe('yaquest', () => {
     describe(`gzip ${gzip ? 'on' : 'off'}`, () => {
 
       beforeEach(done => {
-        server = express().use(bodyParser.json());
+        server = express()
+          .use(bodyParser.json())
+          .use(bodyParser.raw({limit: '10mb'}));
 
         if (gzip) {
           server.use(compression({threshold: 0}));
@@ -68,7 +70,7 @@ describe('yaquest', () => {
 
         describe(method, () => {
 
-          it('should send json and receive', () => {
+          it('should send and receive json', () => {
             return yaquest
               .forUrl(`http://localhost:${port}`)
               [method]('/foo')
@@ -78,6 +80,23 @@ describe('yaquest', () => {
                 expect(server.req.body).to.eql({bar: 'baz'});
                 expect(server.req.path).to.eql('/foo');
                 expect(server.req.method).to.eql(method.toUpperCase());
+                expect(server.req.header('Content-Type')).to.equal('application/json');
+              });
+          });
+
+          it('should send and receive buffers', () => {
+            server.res.body = new Buffer('response body');
+
+            return yaquest
+              .forUrl(`http://localhost:${port}`)
+              [method]('/foo')
+              .send(new Buffer('request body'))
+              .then(res => {
+                expect(res.body.toString()).to.eql('response body');
+                expect(server.req.body.toString()).to.eql('request body');
+                expect(server.req.path).to.eql('/foo');
+                expect(server.req.method).to.eql(method.toUpperCase());
+                expect(server.req.header('Content-Type')).to.equal('application/octet-stream');
               });
           });
 
@@ -104,6 +123,32 @@ describe('yaquest', () => {
 
           describe(method, () => {
 
+            it('query', () => {
+              return yaquest
+                .forUrl(`http://localhost:${port}`)
+                [method]()
+                .query('q1', 'v1')
+                .query('q1', 'v2')
+                .query('q2', 'v3')
+                .then(() => {
+                  expect(server.req.query).to.eql({q1: ['v1', 'v2'], q2: 'v3'});
+                  expect(server.req.path).to.equal('/');
+                });
+            });
+
+            it('query with path', () => {
+              return yaquest
+                .forUrl(`http://localhost:${port}`)
+                [method]('/foo')
+                .query('q1', 'v1')
+                .query('q1', 'v2')
+                .query('q2', 'v3')
+                .then(() => {
+                  expect(server.req.query).to.eql({q1: ['v1', 'v2'], q2: 'v3'});
+                  expect(server.req.path).to.equal('/foo');
+                });
+            });
+
             it('timeout', (done) => {
               server.delay = 1000;
 
@@ -129,7 +174,7 @@ describe('yaquest', () => {
                 [method]('/foo')
                 .then(res => done(new Error('should not get here')))
                 .catch(err => {
-                  expect(err.message).to.equal('request error');
+                  expect(err.message).to.equal('socket hang up');
                   done();
                 })
                 .catch(done);

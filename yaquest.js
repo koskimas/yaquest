@@ -4,6 +4,7 @@ const URL = require('url');
 const zlib = require('zlib');
 const http = require('http');
 const https = require('https');
+const queryString = require('querystring');
 
 class Request {
 
@@ -11,7 +12,7 @@ class Request {
     this._body = null;
     this._binary = false;
     this._timeout = 30000;
-    this._timeoutHandle = null;
+    this._query = {};
     this._opt = {
       headers: {
         'Accept-Encoding': 'gzip'
@@ -78,6 +79,12 @@ class Request {
     return this;
   }
 
+  query(name, value) {
+    this._query[name] = this._query[name] || [];
+    this._query[name].push(value);
+    return this;
+  }
+
   auth(username, password) {
     this._opt.headers['Authorization'] = 'Basic ' + new Buffer(`${username}:${password}`).toString('base64');
     return this;
@@ -116,50 +123,65 @@ class Request {
   }
 
   _execute() {
-    let req = null;
-    let res = null;
+    const ctx = {
+      resolve: null,
+      reject: null,
+      timeoutHandle: null,
+      req: null,
+      res: null
+    };
 
     return new Promise((resolve, reject) => {
-      const httpOrHttps = this._opt.protocol === 'https:' ? https : http;
+      const opt = Object.assign({}, this._opt);
+      const httpOrHttps = opt.protocol === 'https:' ? https : http;
 
-      req = httpOrHttps.request(this._opt, response => {
-        res = response;
+      if (Object.keys(this._query).length) {
+        opt.path += '?' + queryString.encode(this._query);
+      }
+
+      ctx.resolve = resolve;
+      ctx.reject = reject;
+
+      ctx.req = httpOrHttps.request(opt, response => {
+        ctx.res = response;
 
         try {
-          this._onResponse(res, resolve, reject);
+          this._onResponse(ctx);
         } catch (err) {
-          reject(createError({message: 'something went wrong with the response', cause: err}));
+          reject(err);
         }
       });
 
-      this._writeBody(req);
-      this._registerTimeout(req, reject);
+      this._writeBody(ctx);
+      this._registerTimeout(ctx);
 
-      handleError(req, reject, 'request error');
+      handleError(ctx.req, ctx.reject);
 
-      req.url = this._getUrl();
-      req.end();
+      ctx.req.url = this._getUrl();
+      ctx.req.end();
     }).then(res => {
-      this._clearTimeout();
+      this._clearTimeout(ctx);
       return res;
     }).catch(err => {
-      this._clearTimeout();
-      err.req = req;
-      err.res = res;
-      throw err;
+      this._clearTimeout(ctx);
+      err.req = ctx.req;
+      err.res = ctx.res;
+      err.status = (ctx.res && ctx.res.status) || null;
+      err.data = (ctx.res && ctx.res.body) || null;
+      return Promise.reject(err);
     });
   }
 
-  _onResponse(res, resolve, reject) {
+  _onResponse({res, resolve, reject}) {
     const data = [];
     let resStream = res;
 
-    handleError(res, reject, 'response error');
+    handleError(res, reject);
 
     if (isGzipped(res)) {
       resStream = wrapGzip(res);
 
-      handleError(resStream, reject, 'response error');
+      handleError(resStream, reject);
     }
 
     resStream.on('data', chunk => {
@@ -180,33 +202,33 @@ class Request {
       }
 
       if (res.status < 200 || res.status >= 300) {
-        reject(createError({message: http.STATUS_CODES[res.status || 500]}));
+        reject(new Error(http.STATUS_CODES[res.status || 500]));
       } else {
         resolve(res);
       }
     });
   }
 
-  _writeBody(req) {
+  _writeBody({req}) {
     if (this._body) {
       req.write(this._body);
     }
   }
 
-  _registerTimeout(req, reject) {
+  _registerTimeout(ctx) {
     if (this._timeout) {
-      this._timeoutHandle = setTimeout(() => {
-        this._timeoutHandle = null;
-        req.abort();
-        reject(createError({message: `request ${this.toString()} timed out after ${this._timeout} ms`}));
+      ctx.timeoutHandle = setTimeout(() => {
+        ctx.timeoutHandle = null;
+        ctx.req.abort();
+        ctx.reject(new Error(`request ${this.toString()} timed out after ${this._timeout} ms`));
       }, this._timeout);
     }
   }
 
-  _clearTimeout() {
-    if (this._timeoutHandle) {
-      clearTimeout(this._timeoutHandle);
-      this._timeoutHandle = null;
+  _clearTimeout(ctx) {
+    if (ctx.timeoutHandle) {
+      clearTimeout(ctx.timeoutHandle);
+      ctx.timeoutHandle = null;
     }
   }
 }
@@ -222,18 +244,9 @@ function wrapGzip(res) {
   return wrapped;
 }
 
-function createError(data) {
-  const error = new Error(data.message);
-
-  error.data = data;
-  error.cause = data.cause || null;
-
-  return error;
-}
-
-function handleError(emitter, reject, message) {
+function handleError(emitter, reject) {
   emitter.on('error', err => {
-    reject(createError({message, cause: err}));
+    reject(err);
   });
 }
 
