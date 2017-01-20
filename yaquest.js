@@ -103,13 +103,6 @@ class Request {
     return promise.catch.apply(promise, arguments);
   }
 
-  reflect() {
-    const promise = this._execute();
-    return promise
-      .then(value => new PromiseInspection(true, value))
-      .catch(err => new PromiseInspection(false, err));
-  }
-
   toString() {
     return `${this._opt.method} ${this._getUrl()}`;
   }
@@ -139,16 +132,12 @@ class Request {
         }
       });
 
-      // For debugging.
-      req.url = this._getUrl();
-
       this._writeBody(req);
       this._registerTimeout(req, reject);
 
-      req.on('error', err => {
-        reject(createError({message: 'request error', cause: err}));
-      });
+      handleError(req, reject, 'request error');
 
+      req.url = this._getUrl();
       req.end();
     }).then(res => {
       this._clearTimeout();
@@ -163,17 +152,14 @@ class Request {
 
   _onResponse(res, resolve, reject) {
     const data = [];
+    let resStream = res;
 
-    res.on('error', err => {
-      reject(createError({message: 'response error', cause: err}));
-    });
+    handleError(res, reject, 'response error');
 
-    const resStream = wrapGzip(res);
+    if (isGzipped(res)) {
+      resStream = wrapGzip(res);
 
-    if (resStream !== res) {
-      resStream.on('error', err => {
-        reject(createError({message: 'response error', cause: err}));
-      });
+      handleError(resStream, reject, 'response error');
     }
 
     resStream.on('data', chunk => {
@@ -225,39 +211,14 @@ class Request {
   }
 }
 
-class PromiseInspection {
-
-  constructor(isFulfilled, value) {
-    this._isFulfilled = isFulfilled;
-    this._value = value;
-  }
-
-  reason() {
-    return this._value;
-  }
-
-  value() {
-    return this._value;
-  }
-
-  isRejected() {
-    return !this._isFulfilled;
-  }
-
-  isFulfilled() {
-    return this._isFulfilled;
-  }
+function isGzipped(res) {
+  const encoding = res.headers['content-encoding'];
+  return typeof encoding === 'string' && encoding.trim().toLowerCase() === 'gzip';
 }
 
 function wrapGzip(res) {
-  const encoding = res.headers['content-encoding'];
-  let wrapped = res;
-
-  if (typeof encoding === 'string' && encoding.trim().toLowerCase() === 'gzip') {
-    wrapped = zlib.createGunzip();
-    res.pipe(wrapped);
-  }
-
+  const wrapped = zlib.createGunzip();
+  res.pipe(wrapped);
   return wrapped;
 }
 
@@ -268,6 +229,12 @@ function createError(data) {
   error.cause = data.cause || null;
 
   return error;
+}
+
+function handleError(emitter, reject, message) {
+  emitter.on('error', err => {
+    reject(createError({message, cause: err}));
+  });
 }
 
 function combineUrl(baseUrl, path) {
