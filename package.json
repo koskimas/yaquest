@@ -1,0 +1,30 @@
+{
+  "name": "yaquest",
+  "version": "0.1.0",
+  "description": "Node.js request the way I like it",
+  "main": "yaquest.js",
+  "scripts": {
+    "test": "mocha --slow 10 --timeout 10000 --reporter spec --recursive tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/koskimas/yaquest.git"
+  },
+  "keywords": [
+    "node.js",
+    "request",
+    "http"
+  ],
+  "author": "Sami Koskimäki",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/koskimas/yaquest/issues"
+  },
+  "homepage": "https://github.com/koskimas/yaquest#readme",
+  "devDependencies": {
+    "body-parser": "^1.16.0",
+    "expect.js": "^0.3.1",
+    "express": "^4.14.0",
+    "mocha": "^3.2.0"
+  }
+}
