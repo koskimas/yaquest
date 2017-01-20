@@ -163,7 +163,18 @@ class Request {
 
   _onResponse(res, resolve, reject) {
     const data = [];
+
+    res.on('error', err => {
+      reject(createError({message: 'response error', cause: err}));
+    });
+
     const resStream = wrapGzip(res);
+
+    if (resStream !== res) {
+      resStream.on('error', err => {
+        reject(createError({message: 'response error', cause: err}));
+      });
+    }
 
     resStream.on('data', chunk => {
       data.push(chunk);
